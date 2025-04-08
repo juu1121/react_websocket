@@ -1,56 +1,50 @@
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid';
+import { useWebSocket } from './hooks/useWebSocket';
 
 interface Message{
   id:string;
   content:string;
 }
 
-function App() {
 
 
-  const socketRef = useRef<WebSocket|null>(null);
+function App2() {
   
   const [msgs, setMsgs] = useState<Message[]>([]);
-  useEffect(()=>{
-    //컴포넌트가 활성화 되는 시점에 웹소캣 접속하기
-    const socket=new WebSocket("ws://192.168.0.107:9000/ws"); //쌤꺼..? 
-    //const socket=new WebSocket("ws://localhost:9000/ws"); //해당경로로 웹소켓연결요청
-    // 생성된 WebSocket 의 참조값을 socketRef 에 저장해두기 
-    socketRef.current=socket;
-    socket.onopen = ()=>{
-      //socket.send("hi spring boot!");
-    };
-    //서버에서 메세지가 도착하면 실행할 함수 등록
-    socket.onmessage = (event)=>{
-      //콘솔창에 서버가 보낸 메세지 출력 
-      console.log(event.data);
-      /*
-        useEffect() 함수 안에서 이전 상태값을 사용하면서 상태값을 변경할때는 
-        setState((prevState)=>{
-           여기서 prevState 값을 이용해서 새로운 상태값을 만들어서 리턴해주면 된다.
-        }) 
-      */
-
-      setMsgs((prevState)=>{
-        return [...prevState, {id:uuid(), content:event.data}];
-      });
-    };
-    return ()=>{
-      socket.close();
-    }
-  }, []);
   const inputRef=useRef<HTMLInputElement>(null);
+
+
+  // useWebSocket() hook 사용해서 웹소켓 연결하기 //192.168.0.107-> 쌤 // localhost-> 나나
+  const {sendMessage, connected} = useWebSocket("ws://192.168.0.107:9000/ws", {
+    onOpen:()=>{
+      console.log("연결됨!");
+    },
+    onMessage:(event)=>{
+      setMsgs((prevState)=>[...prevState, {id:uuid(), content:event.data}]);
+    },
+    onClose:()=>{
+      console.log("연결끊김!");
+    }
+  });
+  
+
   const handleSend=()=>{
     //입력한 메세지 읽어와서
     const msg=inputRef.current?.value;
-    
-    //전송하기
-    socketRef.current?.send(msg);
+    //서버에 전송할 정보를 담고 있는 object
+    const obj={
+      path:"/chat/send",
+      data:{
+        text:msg
+      }
+    };
+
+    //object를 json문자열로 변환해서 전송하기
+    sendMessage(JSON.stringify(obj));
     //입력창 초기화
     inputRef.current!.value="";
   }
-  console.log(uuid());
   const divStyle={
     height:"300px",
     width:"500px",
@@ -77,7 +71,8 @@ function App() {
   };
   return (
     <div>
-      <h1>WebSocket 테스트</h1>
+      <h1>WebSocket 테스트2</h1>
+      <h2>WebSocket {connected ? "✅ 연결됨" : "❌ 끊김"}</h2>
       <input type="text" ref={inputRef}/>
       <button onClick={handleSend}>전송</button>
       <div style={divStyle} ref={divRef}>
@@ -91,4 +86,4 @@ function App() {
   )
 }
 
-export default App
+export default App2
