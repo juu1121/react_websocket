@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid';
 import { useWebSocket } from './hooks/useWebSocket';
+import { Button, Form, InputGroup } from 'react-bootstrap';
 
 interface Message{
   id:string;
@@ -13,9 +14,13 @@ function App3() {
   
   const [msgs, setMsgs] = useState<Message[]>([]);
   const inputRef=useRef<HTMLInputElement>(null);
+  //대화방에 입장한 userName도 상태값으로 관리하기
+  const [userName, setUserName] = useState<string>();
+  //대화방 참여자 목록도 상태값으로 관리
+  const [userList, setUserList] = useState<string[]>([]);
 
-
-  // useWebSocket() hook 사용해서 웹소켓 연결하기 //192.168.0.107-> 쌤 // localhost-> 나나
+  //192.168.0.107-> 쌤 // localhost-> 나나  // 페이지는 나한테 + 웹소켓연결은 선생님꺼!
+  // useWebSocket() hook 사용해서 웹소켓 연결하기
   const {sendMessage, connected} = useWebSocket("ws://192.168.0.107:9000/ws", {
     onOpen:()=>{
       console.log("연결됨!");
@@ -30,10 +35,24 @@ function App3() {
 						const msg = received.payload.userName+"님이 입장했습니다.";
 						return [...prevState, {id:uuid(), content:msg}]
 					});
+          //사용자 목록을 update한다.
+          setUserList(received.payload.userList);
+
 			}else if(received.type == "leave"){
+        const msg = received.payload.userName+" 님이 퇴장했습니다.";
+        setMsgs(prevState=>[...prevState, {id:uuid(), content:msg}]);
+        //leave 된 userName을 userList에서 제거한다. //퇴장한 사람들 리스트에서 제거하기!
+        //prevState쓰는 이유는 이전상태값에서 필터링한 새로운 배열리턴 => userList는 비어있어서 이전상태값에서 가져오는것
+        setUserList(prevState => prevState.filter(item => item !== received.payload.userName))
 
-			}else if(received.type ==="newMessage"){
 
+			}else if(received.type ==="public"){ //대화하는거인듯: 누가어떤문자열을 구성했는지 모든사람들에게 보냄!
+        setMsgs(prevState=>{
+          //출력할 메세지를 구성한다. //누가 어떤메세지를 보냈는지 문자열 구성
+          const msg = `${received.payload.userName} : ${received.payload.text}`;
+          //배열에 담아서 리턴 //새로운오브젝트를 추가해서 배열을 리턴
+          return [...prevState, {id:uuid(), content:msg}];
+        });
 			}
     },
     onClose:()=>{
@@ -47,8 +66,9 @@ function App3() {
     const msg=inputRef.current?.value;
     //서버에 전송할 정보를 담고 있는 object
     const obj={
-      path:"/chat/send",
+      path:"/chat/public",
       data:{
+        userName, //userName:userName 을 줄여쓴것! 
         text:msg
       }
     };
@@ -60,7 +80,6 @@ function App3() {
   }
   const divStyle={
     height:"300px",
-    width:"500px",
     backgroundColor:"#cecece",
     padding:"10px",
     overflowY:"auto",
@@ -97,24 +116,43 @@ function App3() {
 			}
 		};
 		sendMessage(JSON.stringify(obj));
+    //userName을 상태값에 넣어주기
+    setUserName(obj.data.userName);
+
 	}
 
+
   return (
-    <div>
+    <div className='container'>
       <h1>WebSocket 테스트3</h1>
-      <h2>WebSocket {connected ? "✅ 연결됨" : "❌ 끊김"}</h2>
+      <h2>WebSocket {connected ? "✅ 연결됨" : "❌ 끊김"} {userName}</h2>
 			{ isEnter ?
-				<>
-					<input type="text" ref={inputRef}/>
-					<button onClick={handleSend}>전송</button>
-					<div style={divStyle} ref={divRef}>
-						{msgs.map(item => (
-							<div key={item.id}>
-								<div style={bubbleStyle}>{item.content}</div>
-							</div>
-						))}
-					</div>	
-				</>
+				<div className='row'>
+          <div className='col-8'>
+            <div style={divStyle} ref={divRef}>
+              {msgs.map(item => (
+                <div key={item.id}>
+                  <div style={bubbleStyle}>{item.content}</div>
+                </div>
+              ))}
+            </div>
+            <InputGroup className="mb-3">
+            <Form.Control placeholder="대화입력..." ref={inputRef}/>
+            <Button variant="outline-secondary" onClick={handleSend}>Send </Button>
+          </InputGroup>
+
+          </div>
+          <div className='col-4'>
+              <h3>참여자 목록</h3>
+              <ul>
+                {userList.map(item => 
+                  <li key={item}>
+                    <button>{item}</button>
+                  </li>
+                )}
+              </ul>
+          </div>
+				</div>
 				:
 				<>
 					<input ref={inputUserRef} type="text" placeholder='UserName 입력...' />
