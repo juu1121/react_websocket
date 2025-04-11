@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid';
 import { useWebSocket } from './hooks/useWebSocket';
-import { Button, Form, InputGroup, ListGroup } from 'react-bootstrap';
+import { Button, Form, InputGroup, ListGroup, Modal } from 'react-bootstrap';
 import axios from 'axios';
 
 interface Message{
@@ -206,7 +206,7 @@ function App3() {
     //input type="file" 요소를 강제 클릭해서 이미지를 선택할수있도록 한다.
     fileInputRef.current?.click();
   };
-  
+
   //이미지 파일을 선택했을 때 실행되는 함수수
   const handleFileChange=async(e :React.ChangeEvent<HTMLInputElement>)=>{
     //선택된 파일객체
@@ -266,6 +266,38 @@ function App3() {
     }
   };
 
+  //모달에 출력할 이미지 url "/upload/xxx.png"
+  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
+  //확대, 축소 비율 => 1은 원본크기 , 0.5는 반의 크기기
+  const [scale, setScale] = useState(1);
+  //마우스 휠 이벤트를 처리할 함수
+  const handleWheel = (e: React.WheelEvent<HTMLImageElement>) => {
+    e.preventDefault();
+    //y축 변화량  즉, 휠을 위 아래로 돌린 거리리 = deltaY(이벤트.deltaY : 얼마만큼 스크롤을 했는지)
+    const delta = e.deltaY;
+    //deltaY 값을 이용해서 확대, 축소 배율에 반영하기
+    setScale(prev => {
+      //0보다 크면 확대, 작으면 축소
+      let newScale = delta > 0 ? prev + 0.1 : prev - 0.1;
+
+      //아래코드를 한줄로 쓸 경우!
+      //return Math.min(Math.max(newScale, 0.5), 3); // 최소 0.5배 ~ 최대 3배
+
+      //최소값은 0.5, 최대값은 3
+      if (newScale >= 3) {
+        newScale=3;
+      }else if(newScale <= 0.5){
+        newScale=0.5;
+      }
+      return newScale;
+    });
+  };
+
+  //컨포넌트 활성화 되는 시점 또는 모달에 출력할 이미지가 변경되었을때 배율을 1로 초기화하기기
+  useEffect(() => {
+    if (modalImageUrl) setScale(1);
+  }, [modalImageUrl]);
+
   return (
     <div className='container'>
       <h1>WebSocket 테스트3</h1>
@@ -287,8 +319,10 @@ function App3() {
                       { 
                         item.isImage ? 
                         <img src={item.content}
-                          style={{maxWidth:"200px", borderRadius:"10px"}}
+                          style={{maxWidth:"200px", borderRadius:"10px", cursor:"pointer"}}
                           alt="업로드된 이미지"
+                          //item.content에는 이미지를 로딩할수있는 경로가 들어있있다.
+                          onClick={()=>setModalImageUrl(item.content)}
                         /> 
                         : 
                         item.content
@@ -339,6 +373,39 @@ function App3() {
 					<button onClick={handleEnter}>입장</button>
 				</>
 			}
+
+      <Modal
+        show={modalImageUrl !== null}
+        onHide={() => setModalImageUrl(null)}
+        centered
+        size="lg"
+        keyboard // ESC로도 닫기 가능
+      >
+        <Modal.Header closeButton style={{ backgroundColor: "#222", borderBottom: "1px solid #444" }}>
+          <Modal.Title style={{ color: "#fff" }}>원본 이미지</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, backgroundColor: "#000"}}>
+          {modalImageUrl && (
+            <img
+              src={modalImageUrl}
+              alt="확대 이미지"
+              onWheel={handleWheel}
+              style={{
+                maxWidth: '100%',
+                margin: '0 auto',
+                height: 'auto',
+                display: 'block',
+                transform: `scale(${scale})`, 
+                transformOrigin: 'center',
+                transition: 'transform 0.2s ease-in-out',
+                borderRadius: "0 0 10px 10px",
+                boxShadow: "0 0 10px rgba(0,0,0,0.5)"
+              }}
+            />
+          )}
+        </Modal.Body>
+      </Modal>
+
     </div>
   )
 }
