@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Button, Form, InputGroup, ListGroup } from 'react-bootstrap';
+import axios from 'axios';
 
 interface Message{
   id:string;
   content:string;
   sender?:string; //이 메세지를 누가 보냈는지 정보도 Message 객체에 담기위해 
+  isImage?:boolean; //이 메세지가 이미지인지 여부 
 }
 
 
@@ -65,7 +67,14 @@ function App3() {
 					`[귓말] => ${received.payload.text}`
 				;
 				setMsgs(prevState=>[...prevState, {id:uuid(), content:msg, sender:received.payload.userName}]);
-			}
+			}else if(received.type === "image"){
+        setMsgs(prevState => [...prevState, {
+          id:uuid(),
+          content:`/upload/${received.payload.saveFileName}`,
+          isImage:true,
+          sender:received.payload.userName
+        }]);
+      }
     },
     onClose:()=>{
       console.log("연결끊김!");
@@ -104,7 +113,7 @@ function App3() {
     inputRef.current!.value="";
   }
   const divStyle={
-    height:"300px",
+    height:"500px",
     backgroundColor:"#cecece",
     padding:"10px",
     overflowY:"auto",
@@ -191,6 +200,72 @@ function App3() {
 
 	//귓말 보내기 위해 선택된 userName 을 상태값으로 관리
 	const [selectedUser, setSelectedUser] = useState<string|null>(null);
+  //input type="file"의 참조값
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleImageClick=()=>{
+    //input type="file" 요소를 강제 클릭해서 이미지를 선택할수있도록 한다.
+    fileInputRef.current?.click();
+  };
+  
+  //이미지 파일을 선택했을 때 실행되는 함수수
+  const handleFileChange=async(e :React.ChangeEvent<HTMLInputElement>)=>{
+    //선택된 파일객체
+    const file = e.target.files?.[0];
+    fileUpload(file);
+  }
+
+  //매개변수에 전달된 파일 객체를 업로드하는 함수
+  const fileUpload = async (file:File|undefined|null)=>{
+    if(!file)return;
+    //FormData
+    const formData = new FormData();
+    formData.append("image",file);
+    //axios를 이용해서 multipart/form-data요청해서 이미지 업로드
+    try{
+      //http://192.168.0.107:9000/api/image
+      const response = await axios.post("/api/image", formData, {
+        headers:{"Content-Type":"multipart/form-data"}
+      });
+      console.log(response.data)
+ 
+      //response.data는 {saveFileName:"xxx.png"}
+      // 웹소켓을 이용해서 서버에 업로드된 파일 정보를 전송한다.
+      const obj={
+        path:"/chat/image",
+        data:{
+          userName,
+          saveFileName:response.data.saveFileName
+        }
+      }
+      //json문자열로 얻어내서, 소케서버에 보내기!
+      sendMessage(JSON.stringify(obj));
+
+    }catch(err){
+      console.log("업로드 실패!", err);
+    }
+    /* 
+    finally {
+      // ✅ 같은 파일을 다시 선택해도 onChange가 동작하도록 초기화
+      e.target.value = "";
+    }
+      */
+  }
+
+  //input 요소에 "paste" 이벤트 처리하는 함수
+  const handlePaste = (e:React.ClipboardEvent<HTMLInputElement>)=>{
+    //붙여넣기한 item 목록 얻어내기
+    const items = e.clipboardData.items;
+    //반복문 돌면서
+    for(let i=0; i<items.length; i++){
+      const item = items[i];
+      if(item.kind==="file" && item.type.startsWith("image/")){
+        //실제 파일객체로 얻어낸다.
+        const file = item.getAsFile();
+        fileUpload(file);
+      }
+    }
+  };
+
   return (
     <div className='container'>
       <h1>WebSocket 테스트3</h1>
@@ -209,8 +284,17 @@ function App3() {
 										}}>
 											{item.sender !== userName && <div style={senderStyle}>{item.sender}</div>}
 											<div style={item.sender !== userName ? otherBubbleStyle : myBubbleStyle}>
-												{item.content}</div>
-										</div>
+                      { 
+                        item.isImage ? 
+                        <img src={item.content}
+                          style={{maxWidth:"200px", borderRadius:"10px"}}
+                          alt="업로드된 이미지"
+                        /> 
+                        : 
+                        item.content
+                      }  
+                      </div>
+                    </div>
 									:
 										<div key={item.id} style={infoStyle}>
 											{item.content}
@@ -224,24 +308,29 @@ function App3() {
 							onKeyDown={(e)=>{
 								//Enter 키를 눌렀을떄 handleSend() 함수 호출하기
 								if(e.key === "Enter")handleSend();
-							}}/>
+							}}
+              onPaste={handlePaste}
+              />
+            <Button variant='outline-success' onClick={handleImageClick}>이미지</Button>
             <Button variant="outline-secondary" onClick={handleSend}>Send </Button>
             </InputGroup>
-
+            <input type="file" accept='image/*' ref={fileInputRef}style={{display:"none"}} 
+                    onChange={handleFileChange}/>
           </div>
           <div className='col-4'>
               <h3>참여자 목록</h3>
-							<ListGroup as="ul">
-								{userList.map(item=>
-									<ListGroup.Item as="li"
-										action
-										style={{cursor:"pointer"}}
-										active={item === selectedUser}
-										onClick={()=>setSelectedUser(item===selectedUser ? null : item)}>
-										{item}
-									</ListGroup.Item>
-								)}
-							</ListGroup>
+				<ListGroup as="ul">
+					{userList.map(item=>
+						<ListGroup.Item as="li"
+							key={uuid()}
+							action
+							style={{cursor:"pointer"}}
+							active={item === selectedUser}
+							onClick={()=>setSelectedUser(item===selectedUser ? null : item)}>
+							{item}
+						</ListGroup.Item>
+					)}
+				</ListGroup>
           </div>
 				</div>
 				:
